@@ -7,7 +7,7 @@ Short interactive course to introduce basics of Machine Learning.
 - [ ] Provide an interactive notebook to create and train simple neural network.
 - [ ] Give references to go further.
 
-Work in progres... 
+Work in progres....
 
 ## References: 
 - Add 
