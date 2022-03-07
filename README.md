@@ -10,7 +10,7 @@ Short interactive course to introduce basics of Machine Learning.
 Work in progres....
 
 ## References: 
-- Add 
-- the 
+- [Torch framework for R](https://torch.mlverse.org/)  (with [the example that inspired this introduction](https://torch.mlverse.org/start/guess_the_correlation/))
+- [Introduction to Machine Learning by M. Pichler and F. Hartig](https://theoreticalecology.github.io/machinelearning/introduction.html)
 - references 
 - here
