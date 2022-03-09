@@ -4,10 +4,13 @@ author: "Ismaël Lajaaiti"
 date: "06/03/2022"
 output: html_document
 editor_options: 
+  markdown: 
+    wrap: 72
+  chunk_output_type: console
 chunk_output_type: console
 ---
 
-## Set up 
+## Set up
 
 ```{r, echo = F}
 set.seed(113) # set seed for reproducibility 
@@ -46,14 +49,13 @@ Quick test to check if it torch was installed correctly:
 torch_tensor(1)
 ```
 
-
 ## Prepare the dataset
 
-"Guess the correlation" is a dataset that asks one to guess the correlation
-between two variables from their scatter plot. 
+"Guess the correlation" is a dataset that asks one to guess the
+correlation between two variables from their scatter plot.
 
-For example can you guess the correlation between the variables displayed 
-in the scatter plots below?
+For example can you guess the correlation between the variables
+displayed in the scatter plots below?
 
 ```{r, echo = F, fig.width = 9, fig.height = 5}
 par(mfrow=c(1,2)) # 1 row, 2 columns
@@ -79,10 +81,10 @@ cat("cor(X1,Y1) = ", cor(X1,Y1))
 cat("cor(X2,Y2) = ", cor(X2,Y2)) 
 ```
 
-This dataset contains contains 150,000 observations, where each observation 
-contains: a scatter plot (input) and the corresponding correlation (output). 
-As the dataset is large we will restrict ourselves to a subset to reduce 
-the training time of the neural network.
+This dataset contains contains 150,000 observations, where each
+observation contains: a scatter plot (input) and the corresponding
+correlation (output). As the dataset is large we will restrict ourselves
+to a subset to reduce the training time of the neural network.
 
 ```{r}
 train_ind = 1:10000 # 10,000 observations for training 
@@ -93,57 +95,264 @@ test_ind  = 15001:20000 # 5,000 observations for testing
 Let's download the data.
 
 ```{r, collapse = T}
-root      = file.path(tempdir(), "correlation")
-train_set = guess_the_correlation_dataset(root = root, indexes = train_ind,
+root     = file.path(tempdir(), "correlation")
+train_ds = guess_the_correlation_dataset(root = root, indexes = train_ind,
                                           download = T)
 ```
 
 We will have a look at the first observation to see how it looks like.
-Each observation has two parts: 
-- `$x` = the input data, here the scatter plot 
-- `$y` = the expected output (or the 'label'), here the correlation 
+Each observation has two parts:
+
+-   `$x` = the input data, here the scatter plot
+-   `$y` = the expected output (or the 'label'), here the correlation
 
 ```{r}
-first_element = train_set[1]
+first_element = train_ds[1]
 input  = first_element$x # torch tensor (150,150) = scatter plot 
 output = first_element$y # torch tensor (1,) = correlation coef. 
 ```
 
 The scatter plot is encoded as a tensor, but we can plot it as follow:
 
-```{r}
+```{r, fig.width = 4, fig.height = 4}
 input %>% as.array() %>% as.raster() %>% plot()
 ```
 
-We see that the scatter plot includes the axis that are unnecessary for our 
-inference task, then let's remove the axis by cropping the picture. 
+We see that the scatter plot includes the axis that are unnecessary for
+our inference task, then let's remove the axis by cropping the picture.
 
-```{r}
+```{r, fig.width = 4, fig.height = 4}
 cropped_input = input[0:130, 21:150] # input without axis 
 cropped_input %>% as.array() %>% as.raster() %>% plot()
 ```
 
+We have already built the training set above. In addition, we build the 
+validation and test dataset. As the data was already download before, we 
+do not need to download it again. We just pick different indices. 
 
 ```{r}
-#b = guess_the_correlation_dataset(
-# where to unpack
-#root = root,
-# additional preprocessing 
-#transform = function(img) crop_axes(img) %>% add_channel_dim(),
-# don't take all data, but just the indices we pass in
-#indexes = 2:100,
-#download = FALSE
-#)
+valid_ds = guess_the_correlation_dataset(root = root, indexes = valid_ind,
+    download = F)
+
+test_ds = guess_the_correlation_dataset(root = root, indexes = test_ind,
+    download = F)
+```
+
+Quick check of the size of our train, validation and test sets
+
+```{r collapse=TRUE}
+length(train_ds)
+length(valid_ds)
+length(test_ds)
 ```
 
 
-# Work with batches 
-
-# Create the neural network 
-
-# Train the neural network 
-
-# Evaluate performance 
+```{r}
+train_dl = dataloader(train_ds, batch_size = 64, shuffle = T)
+valid_dl = dataloader(valid_ds, batch_size = 64, shuffle = F)
+test_dl  = dataloader(test_ds , batch_size = 64, shuffle = F)
+```
 
 
+```{r}
+length(train_dl)
+ceiling(length(train_ds) / 64)
+```
 
+
+```{r}
+first_batch <- dataloader_make_iter(train_dl) %>% dataloader_next()
+dim(first_batch$x) # 64 first scatter plots (64, 150, 150)
+dim(first_batch$y) # 64 first correlations (64,)
+```
+
+  
+```{r}
+torch_manual_seed(113) # set seed for reproducibility 
+
+# Create neural network.
+dnn <- nn_module(
+  
+  "corr-dnn", # network name 
+  
+  # Define hidden layers.
+  initialize = function(n_in, n_hidden, n_out) {
+    self$fc1 <- nn_linear(in_features = n_in    , out_features = n_hidden)
+    self$fc2 <- nn_linear(in_features = n_hidden, out_features = n_hidden)
+    self$fc3 <- nn_linear(in_features = n_hidden, out_features = n_hidden)
+    self$fc4 <- nn_linear(in_features = n_hidden, out_features = n_out)
+  },
+  
+  # How input goes through the network.
+  forward = function(x) {
+    x %>% # input
+      self$fc1() %>% # 1st layer 
+      nnf_relu() %>% # activation function
+ 
+      self$fc2() %>% # 2nd layer
+      nnf_relu() %>% # activation function
+ 
+      self$fc3() %>% # etc.
+      nnf_relu() %>% # ...
+
+      self$fc4()     # output
+  }
+)
+```
+
+
+```{r}
+height = dim(cropped_input)[1] # height of the picture 
+width  = dim(cropped_input)[2] # width 
+n_in  = height * width # total number of pixels 
+n_out = 1 # expect one value in output: the correlation 
+n_hidden = 100 # play with this value to optimize the network
+```
+
+
+```{r}
+network = dnn(n_in, n_hidden, n_out)
+opt = optim_adam(params = network$parameters) # for param. opt. during training
+network
+# WEIGHTS           + BIAS    = PARAMETERS
+# node_in*n_out     + n_out
+n_in     * n_hidden + n_hidden
+n_hidden * n_hidden + n_hidden
+n_hidden * n_hidden + n_hidden
+n_hidden * n_out    + n_out
+```
+
+
+```{r}
+trainStep = function(network, batch){
+  opt$zero_grad() 
+  batch_size = dim(batch$x)[1]
+  input = batch$x
+  input = input[1:batch_size, 0:130, 21:150] # crop axis
+  input = input$reshape(c(batch_size, 130*130)) # flatten input 
+  output.pred = network(input)$squeeze(2) # correlation predicted by the DNN
+  output.true = batch$y # expected correlation
+  loss = nnf_mse_loss(output.pred, output.true) # error between pred and true
+  loss$backward() # backward propagation 
+  opt$step()
+  loss$item() # get value 
+}
+```
+
+
+```{r}
+validStep(network, first_batch)
+```
+
+
+```{r}
+validStep = function(network, batch){
+  batch_size = dim(batch$x)[1]
+  input = batch$x
+  input = input[1:batch_size, 0:130, 21:150] # crop axis
+  input = input$reshape(c(batch_size, 130*130)) # flatten input  
+  output.pred = network(input)$squeeze(2) # correlation predicted by the DNN
+  output.true = batch$y # expected correlation
+  loss = nnf_mse_loss(output.pred, output.true) # error between pred and true
+  loss$item() # get value 
+}
+```
+
+
+```{r}
+trainingLoop = function(network, train_dl, valid_dl,
+                        epoch_max = 5, patience = 2){
+  
+  # Initialize variables. 
+  epoch = 1
+  count = 0
+  loss.previous = 100
+  
+  # Training loop.
+  while(epoch < epoch_max & count < patience){
+    
+    # Train.
+    network$train()
+    Loss.train = c()
+    coro::loop(for (batch in train_dl){
+      loss.train = trainStep(network, batch) # go over the batch 
+      Loss.train = c(Loss.train, loss.train) # save loss value
+    })
+    cat(sprintf("Epoch %0.3d/%0.3d - Train - Loss = % 3.5f \n",
+                epoch, epoch_max, mean(Loss.train))) # progress
+    
+    # Validation.
+    network$eval()
+    Loss.valid = c()
+    coro::loop(for (batch in valid_dl){
+      loss.valid = validStep(network, batch) # go over the batch 
+      Loss.valid = c(Loss.valid, loss.valid) # save loss value
+    })
+    cat(sprintf("Epoch %0.3d/%0.3d - Valid - Loss = % 3.5f \n",
+                epoch, epoch_max, mean(Loss.valid))) # progress
+    
+    # Check for early stopping.
+    loss.now = mean(Loss.valid) # mean loss at the current epoch
+    if (loss.now > loss.previous){ # if loss has increase, increment counter 
+      count = count + 1}else{ # else, reset counter and loss baseline value
+      count = 0
+      loss.previous = loss.now
+    }
+    
+    epoch = epoch + 1 # next epoch 
+    
+  }
+}
+```
+
+
+```{r}
+trainingLoop(network, test_dl, valid_dl)
+```
+
+```{r}
+testStep = function(network, batch){
+  batch_size = dim(batch$x)[1]
+  input = batch$x
+  input = input[1:batch_size, 0:130, 21:150] # crop axis
+  input = input$reshape(c(batch_size, 130*130)) # flatten input  
+  output.pred = network(input)$squeeze(2) # correlation predicted by the DNN
+  output.true = batch$y # expected correlation
+  output = list(pred = output.pred, true = output.true)
+  return(output)
+}
+```
+
+
+```{r}
+testLoop = function(network, test_dl){
+  Pred = c() # store predicted correlations
+  True = c() # store true correlations
+  coro::loop(for (batch in test_dl){
+      output = testStep(network, batch) # go over the batch 
+      Pred = c(Pred, output$pred %>% as.array()) # save pred. values
+      True = c(True, output$true %>% as.array()) # save true values 
+    })
+  out = list(true = True, pred = Pred)
+  return(out)
+}
+```
+
+```{r}
+out = testLoop(network, valid_dl)
+```
+
+```{r}
+plot(out$true, out$pred)
+abline(0,1)
+```
+
+
+
+# Work with batches
+
+# Create the neural network
+
+# Train the neural network
+
+# Evaluate performance
