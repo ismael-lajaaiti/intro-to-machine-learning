@@ -10,6 +10,8 @@ editor_options:
 chunk_output_type: console
 ---
 
+Inspired from [this tutorial](https://torch.mlverse.org/start/guess_the_correlation/).
+
 ## Set up
 
 ```{r, echo = F}
@@ -22,13 +24,13 @@ Installing the Machine Learning framework.
 installed.pkg = installed.packages()[,1] # installed packages on your system
 
 # If not installed, download the required packages.
-required_pkg = c("torch", "torchvision", "luz") # list of required packages 
+required_pkg = c("torch", "torchvision") # list of required packages 
 for (pkg in required_pkg) {
   if (!is.element(pkg, installed.pkg)){install.packages(pkg)}
 }
 ```
 
-In addition download the dataset we will be using here.
+In addition download the dataset we will be using.
 
 ```{r}
 remotes::install_github("mlverse/torchdatasets")
@@ -39,11 +41,10 @@ Load libraries.
 ```{r}
 library("torch") 
 library("torchvision")
-library("luz")
 library("torchdatasets")
 ```
 
-Quick test to check if it torch was installed correctly:
+Quick test to check if torch is installed correctly:
 
 ```{r, collapse = T}
 torch_tensor(1)
@@ -51,7 +52,7 @@ torch_tensor(1)
 
 ## Prepare the dataset
 
-"Guess the correlation" is a dataset that asks one to guess the
+*Guess the correlation* is a dataset that asks one to guess the
 correlation between two variables from their scatter plot.
 
 For example can you guess the correlation between the variables
@@ -74,7 +75,7 @@ Y2 = X2 + rnorm(n, 0, 0.1)
 plot(X2, Y2, xlim = lim, ylim = lim, pch = 20)
 ```
 
-And the answer was...
+The answer is...
 
 ```{r, collapse = T}
 cat("cor(X1,Y1) = ", cor(X1,Y1)) 
@@ -83,8 +84,8 @@ cat("cor(X2,Y2) = ", cor(X2,Y2))
 
 This dataset contains contains 150,000 observations, where each
 observation contains: a scatter plot (input) and the corresponding
-correlation (output). As the dataset is large we will restrict ourselves
-to a subset to reduce the training time of the neural network.
+correlation (output). As the dataset is large, to reduce the training time of 
+the neural network we will restrict ourselves to a subset.
 
 ```{r}
 train_ind = 1:10000 # 10,000 observations for training 
@@ -92,7 +93,7 @@ valid_ind = 10001:15000 # 5,000 observations for validation
 test_ind  = 15001:20000 # 5,000 observations for testing 
 ```
 
-Let's download the data.
+Let's download the data and pick the indices for the train set.
 
 ```{r, collapse = T}
 root     = file.path(tempdir(), "correlation")
@@ -100,7 +101,7 @@ train_ds = guess_the_correlation_dataset(root = root, indexes = train_ind,
                                           download = T)
 ```
 
-We will have a look at the first observation to see how it looks like.
+First, we will have a look at the first observation to see how it looks like.
 Each observation has two parts:
 
 -   `$x` = the input data, here the scatter plot
@@ -118,22 +119,25 @@ The scatter plot is encoded as a tensor, but we can plot it as follow:
 input %>% as.array() %>% as.raster() %>% plot()
 ```
 
-We see that the scatter plot includes the axis that are unnecessary for
-our inference task, then let's remove the axis by cropping the picture.
+The scatter plot includes the axis that are unnecessary to infer the
+correlation, then let's remove them by cropping the picture.
 
 ```{r, fig.width = 4, fig.height = 4}
 cropped_input = input[0:130, 21:150] # input without axis 
-cropped_input %>% as.array() %>% as.raster() %>% plot()
+cropped_input %>% as.array() %>% as.raster() %>% plot() # plot to check
 ```
 
-We have already built the training set above. In addition, we build the 
-validation and test dataset. As the data was already download before, we 
-do not need to download it again. We just pick different indices. 
+We have already create the training set above (`train_ds`). In addition,
+we create the validation and test sets. As the data was already
+download before, we do not need to download it again. We just pick
+different indices.
 
 ```{r}
+# Validation set.
 valid_ds = guess_the_correlation_dataset(root = root, indexes = valid_ind,
     download = F)
 
+# Test set.
 test_ds = guess_the_correlation_dataset(root = root, indexes = test_ind,
     download = F)
 ```
@@ -146,6 +150,12 @@ length(valid_ds)
 length(test_ds)
 ```
 
+To make the neural network training faster, we will work with *batches*.
+A batch is a subset that contains a bunch of observations (here 64).
+During the training, instead of going over each observation
+individually, the neural network will process simultaneously the observations
+belonging to the same batch. In the torch framework, this process of splitting 
+each set in batches is handled by the objects called `dataloader`.
 
 ```{r}
 train_dl = dataloader(train_ds, batch_size = 64, shuffle = T)
@@ -153,20 +163,36 @@ valid_dl = dataloader(valid_ds, batch_size = 64, shuffle = F)
 test_dl  = dataloader(test_ds , batch_size = 64, shuffle = F)
 ```
 
+The length of the dataloader is equal to its number of batches. That
+latter can be recovered by dividing the number of observations in the
+dataset by the batch size (here 64).
 
-```{r}
+```{r collapse = T}
 length(train_dl)
 ceiling(length(train_ds) / 64)
 ```
 
+Let's have look to the first batch.
 
-```{r}
+```{r collapse = T}
 first_batch <- dataloader_make_iter(train_dl) %>% dataloader_next()
 dim(first_batch$x) # 64 first scatter plots (64, 150, 150)
 dim(first_batch$y) # 64 first correlations (64,)
 ```
 
-  
+Our data is well-prepared and ready to be given to our neural
+network. Then we can now build the neural network.
+
+## Build the neural network
+
+In the torch framework, a neural network is defined by two functions:
+
+1.  `initialize` which describes the structure of the network i.e. the
+    number of layers and the number of neurons per layer
+
+2.  `forward` which tells how the data goes through the different layers
+    previously defined
+
 ```{r}
 torch_manual_seed(113) # set seed for reproducibility 
 
@@ -175,7 +201,7 @@ dnn <- nn_module(
   
   "corr-dnn", # network name 
   
-  # Define hidden layers.
+  # Define layers.
   initialize = function(n_in, n_hidden, n_out) {
     self$fc1 <- nn_linear(in_features = n_in    , out_features = n_hidden)
     self$fc2 <- nn_linear(in_features = n_hidden, out_features = n_hidden)
@@ -200,6 +226,18 @@ dnn <- nn_module(
 )
 ```
 
+The `initialize` function takes three arguments:
+
+1.  `n_in`: the size of the input, here the number of pixels of the
+    scatter plot, we flatten the 2d picture of size (height, width) into
+    a 1d vector of size (width\*height)
+
+2.  `n_hidden`: the number of neurons in the hidden layers
+
+3.  `n_out`: the size of output, here 1 as the output is the correlation
+
+Arguments can be added, deleted or replaced depending on your needs. Here is 
+just a simple example that fits most situations. 
 
 ```{r}
 height = dim(cropped_input)[1] # height of the picture 
@@ -209,12 +247,16 @@ n_out = 1 # expect one value in output: the correlation
 n_hidden = 100 # play with this value to optimize the network
 ```
 
+We can call the function and create our neural network, and check its
+structure.
 
-```{r}
+```{r collapse = T}
 network = dnn(n_in, n_hidden, n_out)
 opt = optim_adam(params = network$parameters) # for param. opt. during training
 network
+# ----------------------------------------
 # WEIGHTS           + BIAS    = PARAMETERS
+# ----------------------------------------
 # node_in*n_out     + n_out
 n_in     * n_hidden + n_hidden
 n_hidden * n_hidden + n_hidden
@@ -222,6 +264,28 @@ n_hidden * n_hidden + n_hidden
 n_hidden * n_out    + n_out
 ```
 
+The network is ready to be trained.
+
+## Training loop
+
+One iteration of the training loop is called an *epoch* and 
+can be summarized as follow:
+
+1.  Training over the batches of the training set
+    a. Make prediction on a batch
+    b. Compute the prediction error
+    c. Change weight to reduce the prediction error
+    d. Repeat for next batch, until the end of train set...
+2.  Validation over the batches of the validation set
+    a. Make prediction on a batch
+    b. Compute prediction error
+    d. Repeat for next batch, until the end of validation set...
+3.  Early stopping check
+    a. If error has decreased continue the training
+    b. Else stop the training
+
+To build that loop we specify first how the network should process 
+batches during the training step...
 
 ```{r}
 trainStep = function(network, batch){
@@ -239,11 +303,7 @@ trainStep = function(network, batch){
 }
 ```
 
-
-```{r}
-validStep(network, first_batch)
-```
-
+... then during the validation step...
 
 ```{r}
 validStep = function(network, batch){
@@ -258,6 +318,7 @@ validStep = function(network, batch){
 }
 ```
 
+... and now we can assemble the pieces.
 
 ```{r}
 trainingLoop = function(network, train_dl, valid_dl,
@@ -269,7 +330,7 @@ trainingLoop = function(network, train_dl, valid_dl,
   loss.previous = 100
   
   # Training loop.
-  while(epoch < epoch_max & count < patience){
+  while(epoch <= epoch_max & count < patience){
     
     # Train.
     network$train()
@@ -305,10 +366,17 @@ trainingLoop = function(network, train_dl, valid_dl,
 }
 ```
 
+Training the network (it can take some times...)
 
-```{r}
-trainingLoop(network, test_dl, valid_dl)
+```{r collapse = T}
+trainingLoop(network, train_dl, valid_dl, epoch_max = 5)
 ```
+
+## Evaluate the network 
+
+Our network is now trained and ready to predict correlations from scatter plots 
+it has *never* seen. That what the test set is for. 
+Let's specify how the network is tested on one batch...
 
 ```{r}
 testStep = function(network, batch){
@@ -323,6 +391,7 @@ testStep = function(network, batch){
 }
 ```
 
+... and then loop over all the batches of the test set.
 
 ```{r}
 testLoop = function(network, test_dl){
@@ -338,21 +407,25 @@ testLoop = function(network, test_dl){
 }
 ```
 
-```{r}
-out = testLoop(network, valid_dl)
-```
+Testing the network.
 
 ```{r}
-plot(out$true, out$pred)
-abline(0,1)
+out = testLoop(network, test_dl)
 ```
 
+The most direct way to have a quick idea of how well our network performs is to 
+plot the predicted correlations against the true correlations.
 
+```{r, fig.width = 7, fig.height = 7}
+# Plot Pred vs. True. 
+plot(out$true, out$pred, xlab = 'True correlation',
+     ylab = 'Predicted correlation', cex = 0.5, col = rgb(.1,.1,.1, 0.6))
+# Plot 1:1 line.
+abline(0, 1, lw = 4)
+# Add legend. 
+legend("topleft", legend = c("Data", "1:1"), lwd = c(NA, 4), pch = c(1, NA))
+```
 
-# Work with batches
-
-# Create the neural network
-
-# Train the neural network
-
-# Evaluate performance
+The performances of the network can be quantified more accurately
+(e.g. by decomposing the total error in variance and bias),
+but that's beyond the scope of this introduction.
