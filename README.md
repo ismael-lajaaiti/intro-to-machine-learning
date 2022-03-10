@@ -10,7 +10,7 @@ Short interactive course to introduce basics of Machine Learning.
     - [ ] Who is using Machine Learning? Give examples of uses of Machine Learning in different fields
     - [ ] Why to use Machine Learning? 
     - [ ] How to use Machine Learning? see `.Rmd` file
-- [ ] Provide an interactive notebook to create and train simple neural network.
+- [x] Provide an interactive notebook to create and train simple neural network.
 - [ ] Give references to go further.
 
 Work in progres....
@@ -18,5 +18,4 @@ Work in progres....
 ## References: 
 - [Torch framework for R](https://torch.mlverse.org/)  (with [the example that inspired this introduction](https://torch.mlverse.org/start/guess_the_correlation/))
 - [Introduction to Machine Learning by M. Pichler and F. Hartig](https://theoreticalecology.github.io/machinelearning/introduction.html)
-- references 
-- here
+- ...
