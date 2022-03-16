@@ -1,19 +1,19 @@
 # Introduction to Machine Learning
 
-Short interactive course to introduce basics of Machine Learning.
+Short interactive course to introduce basics of Machine Learning in R with Torch.
 
-## Expected features
-- [ ] Explain the basics of Machine Learning 
-    - [ ] What is Machine Learning? Explain main concepts (e.g. gradient descent, overfitting)
-    - [ ] Where to use Machine Learning? Present Machine Learning frameworks (Tensorflow vs. Torch)
-    - [ ] When to use Machine Learning? Conditions to use Machine Learning (e.g large dataset)
-    - [ ] Who is using Machine Learning? Give examples of uses of Machine Learning in different fields
-    - [ ] Why to use Machine Learning? 
-    - [x] How to use Machine Learning? see `.Rmd` file
-- [x] Provide an interactive notebook to create and train simple neural network
-- [ ] Give references to go further
+## Features
+- [Presentation of the basics of Machine Learning](slides-basics-machine-learning.pdf) which:
+    - Explains main concepts of Machine Learning (e.g. gradient descent, overfitting)
+    - Presents Machine Learning frameworks in R (Tensorflow vs. Torch)
+    - Gives examples of uses of Machine Learning in different fields
+- [Provide an interactive Rmarkdown to create a simple neural network with Torch](introduction-machine-learning.Rmd) (also available in [pdf](introduction-machine-learning.Rmd.pdf) and [html](introduction-machine-learning.Rmd.html)) which go over the following steps:
+    - Cleaning the data
+    - Building a deep neural network 
+    - Training the neural network 
+    - Evaluating performances of the neural network
+- Give references to go further (see below)
 
-Work in progres....
 
 ## Requirements 
 
@@ -37,7 +37,7 @@ library(torch)
 torch_tensor(1)
 ```
 
-## References: 
-- [Torch framework for R](https://torch.mlverse.org/)  (with [the example that inspired this introduction](https://torch.mlverse.org/start/guess_the_correlation/))
-- [Introduction to Machine Learning by M. Pichler and F. Hartig](https://theoreticalecology.github.io/machinelearning/introduction.html)
-- Add more references...
+## Further reading
+- [Torch framework for R](https://torch.mlverse.org/)  (with [the example that inspired the Rmarkdown](https://torch.mlverse.org/start/guess_the_correlation/))
+- [PyTorch documentation](https://pytorch.org/docs/stable/index.html) that can complete the incomplete R documentation (if you know a bit about Python, it can be easily transposed in R)
+- [Introductory course to Machine Learning by M. Pichler and F. Hartig](https://theoreticalecology.github.io/machinelearning/introduction.html)
